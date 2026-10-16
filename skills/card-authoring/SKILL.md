@@ -34,7 +34,7 @@ the card type.**
 |---|---|
 | **basic** | Default: concepts, definitions, "why/how", understanding, inference. |
 | **cloze** | Embedded single facts; the context sentence carries the meaning. Delete only the **keyword**, not half sentences; several deletions → c1, c2 … individually. |
-| **occlusion** | Only **spatial/visual** mapping (anatomy, geography, diagrams, architecture). Mask only exam-relevant labels. For "why/how" → text card. |
+| **occlusion** | Only **spatial/visual** mapping (anatomy, geography, diagrams, architecture). Mask only exam-relevant labels — but **every** label whose concept the source covers (check the text for each label; an unmasked course concept is a gap). For "why/how" → text card. |
 | **typein** | Only where **exact spelling/syntax** counts (commands, keywords, terms, vocabulary). Not for concepts (typos/synonyms = frustration). |
 | **basic + `reverse:true`** | Only for genuine **two-way use** (vocabulary L1↔L2, term↔definition). Omit for confusable pairs (interference). |
 
@@ -163,3 +163,4 @@ fact → cite the source instead of guessing.
 - [ ] Details/source (if useful) in `explanation`/`source` — not in the retrieval.
 - [ ] **Grounded in the source**, no duplicate.
 - [ ] **Image check** done: relevant figure (`.figures.md`) viewed if visual.
+- [ ] Occlusion: every label whose concept is in the source is masked.
