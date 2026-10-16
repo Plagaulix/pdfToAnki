@@ -6,24 +6,24 @@ from _tools import load
 occ = load("_occlusion")
 
 SMALL = {"label": "A", "x": .10, "y": .10, "w": .10, "h": .04}
-LARGE = {"label": "Longer label", "x": .50, "y": .50, "w": .30, "h": .08}
+LARGE = {"label": "Longer label", "x": .50, "y": .50, "w": .30, "h": .05}
 
 
 class TestMaskBoxes(unittest.TestCase):
     def test_regions_are_kept_as_given_by_default(self):
         boxes = occ.mask_boxes({"regions": [SMALL, LARGE]})
-        self.assertEqual(boxes, [(.10, .10, .10, .04), (.50, .50, .30, .08)])
+        self.assertEqual(boxes, [(.10, .10, .10, .04), (.50, .50, .30, .05)])
 
     def test_uniform_masks_take_the_largest_size_centered_on_each_label(self):
         boxes = occ.mask_boxes({"uniform_masks": True, "regions": [SMALL, LARGE]})
         for box in boxes:
             self.assertAlmostEqual(box[2], .30)
-            self.assertAlmostEqual(box[3], .08)
+            self.assertAlmostEqual(box[3], .05)
         # The small label stays at the center of its now larger mask.
         x, y, w, h = boxes[0]
         self.assertAlmostEqual(x + w / 2, SMALL["x"] + SMALL["w"] / 2)
         self.assertAlmostEqual(y + h / 2, SMALL["y"] + SMALL["h"] / 2)
-        self.assertEqual(boxes[1], (.50, .50, .30, .08))
+        self.assertEqual(boxes[1], (.50, .50, .30, .05))
 
     def test_uniform_height_is_one_line_and_multiline_labels_keep_theirs(self):
         lines = [{"label": str(n), "x": .1, "y": .1 + .1 * n, "w": .05 + .01 * n, "h": h}
@@ -33,6 +33,14 @@ class TestMaskBoxes(unittest.TestCase):
         self.assertEqual({round(b[2], 6) for b in boxes}, {.1})
         self.assertEqual({round(b[3], 6) for b in boxes[:4]}, {.042})
         self.assertAlmostEqual(boxes[4][3], .08)
+
+    def test_one_line_height_holds_when_half_the_labels_span_two_lines(self):
+        regions = [{"label": "a", "x": .1, "y": .1, "w": .2, "h": .08},
+                   {"label": "b", "x": .1, "y": .3, "w": .2, "h": .08},
+                   {"label": "c", "x": .1, "y": .6, "w": .1, "h": .03},
+                   {"label": "d", "x": .1, "y": .8, "w": .3, "h": .032}]
+        heights = [b[3] for b in occ.mask_boxes({"uniform_masks": True, "regions": regions})]
+        self.assertEqual([round(h, 6) for h in heights], [.08, .08, .032, .032])
 
     def test_uniform_masks_are_shifted_back_inside_the_image(self):
         edge = {"label": "E", "x": .0, "y": .97, "w": .02, "h": .02}

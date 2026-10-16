@@ -49,13 +49,15 @@ def _trim(box_a, box_b, ra, rb):
         box_b[pos] = b_start
 
 
-# A region more than this factor taller than the median holds several lines.
+# A region more than this factor taller than the (lower) median holds several
+# lines. The lower median keeps one-line labels as the reference even when
+# half of a figure's labels span two lines.
 _MULTILINE_FACTOR = 1.5
 
 
 def _one_line_height(regions):
     heights = sorted(r["h"] for r in regions)
-    median = heights[len(heights) // 2]
+    median = heights[(len(heights) - 1) // 2]
     return max(h for h in heights if h <= _MULTILINE_FACTOR * median)
 
 
