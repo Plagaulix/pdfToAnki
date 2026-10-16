@@ -26,7 +26,7 @@ import genanki
 from _filenames import collision_key
 from _card_media import rewrite_local_images
 from _card_schema import TEXT_FIELDS, validate_schema
-from _occlusion import mask_boxes, native_occlusion_field, padded
+from _occlusion import BOX_PAD, box_pad, mask_boxes, native_occlusion_field, padded
 
 
 def stable_id(text: str) -> int:
@@ -317,8 +317,8 @@ def _pct(value: float) -> str:
     return f"{float(value) * 100:.4f}%"
 
 
-def _style(box):
-    x, y, w, h = padded(box)
+def _style(box, pad=BOX_PAD):
+    x, y, w, h = padded(box, pad)
     return f"left:{_pct(x)};top:{_pct(y)};width:{_pct(w)};height:{_pct(h)}"
 
 
@@ -327,7 +327,7 @@ def _box_style(r):
 
 
 def _occlusion_html(img_src, regions, target, mode, reveal, header, extra,
-                    boxes=None, show_label=True):
+                    boxes=None, show_label=True, pad=BOX_PAD):
     """Renders one side of an occlusion card.
 
     reveal=False -> front (question), reveal=True -> back (answer).
@@ -336,6 +336,7 @@ def _occlusion_html(img_src, regions, target, mode, reveal, header, extra,
     boxes: unpadded mask boxes (default: the regions themselves).
     show_label: caption with the answer below the image (Anki's native
           occlusion shows none — it just uncovers the label in the image).
+    pad: mask padding (see _occlusion.box_pad).
     """
     if boxes is None:
         boxes = [(r["x"], r["y"], r["w"], r["h"]) for r in regions]
@@ -346,7 +347,7 @@ def _occlusion_html(img_src, regions, target, mode, reveal, header, extra,
     parts.append(f'<img src="{html.escape(img_src, quote=True)}">')
 
     for i, box in enumerate(boxes):
-        pos = _style(box)
+        pos = _style(box, pad)
         if not reveal:  # front
             masked = True if mode == "hide-all" else (i == target)
         else:  # back
@@ -499,12 +500,13 @@ def render_occlusion(card, img_src):
     more = _more_html(card)
     boxes = mask_boxes(card)
     show_label = not card.get("native")
+    pad = box_pad(card)
     out = []
     for target in range(len(regions)):
         front = _occlusion_html(img_src, regions, target, mode, False, header, extra,
-                                boxes, show_label)
+                                boxes, show_label, pad)
         back = _occlusion_html(img_src, regions, target, mode, True, header, extra,
-                               boxes, show_label) + more
+                               boxes, show_label, pad) + more
         out.append((front, back))
     return out
 
@@ -512,7 +514,7 @@ def render_occlusion(card, img_src):
 def _add_native_occlusion_note(deck, card, img_src):
     """ONE note of Anki's own Image Occlusion type; Anki makes a card per mask."""
     # Masks are stored padded, so Anki shows exactly what the preview shows.
-    boxes = [padded(b) for b in mask_boxes(card)]
+    boxes = [padded(b, box_pad(card)) for b in mask_boxes(card)]
     occlusion = native_occlusion_field(boxes, card.get("mode") == "hide-all")
     header = html.escape(card.get("header", ""))
     back_extra = card.get("extra", "") + _more_html(card)

@@ -86,6 +86,14 @@ class TestMaskBoxes(unittest.TestCase):
         boxes = occ.mask_boxes({"uniform_masks": True, "regions": regions})
         self.assertEqual(occ.overlapping_pairs(boxes), [(0, 1)])
 
+    def test_classic_masks_keep_one_percent_padding_native_ones_half(self):
+        self.assertEqual(occ.box_pad({"regions": []}), .01)
+        self.assertEqual(occ.box_pad({"native": True, "regions": []}), .005)
+        for got, want in zip(occ.padded((.1, .1, .1, .1)), (.09, .09, .12, .12)):
+            self.assertAlmostEqual(got, want)
+        for got, want in zip(occ.padded((.1, .1, .1, .1), .005), (.095, .095, .11, .11)):
+            self.assertAlmostEqual(got, want)
+
     def test_padding_never_leaves_0_1(self):
         x, y, w, h = occ.padded((0.0, 0.0, 1.0, 1.0))
         self.assertGreaterEqual(x, 0)

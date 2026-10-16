@@ -209,6 +209,11 @@ class TestOcclusionTargets(unittest.TestCase):
                 self.assertNotIn("io-mask-target", front)
                 self.assertEqual(self.masks(self.render(target, "hide-one", reveal=True)), [])
 
+    def test_classic_mask_html_is_unchanged_from_the_original_format(self):
+        card = {"type": "occlusion", "image": "d.png", "mode": "hide-all", "regions": self.REGIONS}
+        front, _ = bd.render_occlusion(card, "d.png")[0]
+        self.assertIn('style="left:9.0000%;top:19.0000%;width:22.0000%;height:12.0000%"', front)
+
     def test_uniform_masks_render_with_identical_sizes(self):
         regions = [dict(self.REGIONS[0], w=.05), self.REGIONS[1]]
         card = {"type": "occlusion", "image": "d.png", "mode": "hide-all",

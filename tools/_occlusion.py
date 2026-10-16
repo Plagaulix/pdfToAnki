@@ -5,8 +5,15 @@ w/h = width/height. A "box" is the (x, y, w, h) tuple of one mask.
 """
 
 # A bit of air around each box so mask/outline don't squeeze the (often small)
-# text skin-tight -> much easier to recognize and read.
-BOX_PAD = 0.005
+# text skin-tight -> much easier to recognize and read. Native masks use less:
+# they stay editable in Anki, and labels there are usually measured tightly.
+BOX_PAD = 0.01
+NATIVE_BOX_PAD = 0.005
+
+
+def box_pad(card):
+    """Padding of a card's masks: classic self-rendered or Anki-native."""
+    return NATIVE_BOX_PAD if card.get("native") else BOX_PAD
 
 
 def _centered(region, w, h):
@@ -23,7 +30,7 @@ def _gap(a0, a1, b0, b1):
     return max(b0 - a1, a0 - b1)
 
 
-def _trim(box_a, box_b, ra, rb):
+def _trim(box_a, box_b, ra, rb, pad):
     """Shrinks two overlapping boxes up to the middle of the gap between their
     regions, along the axis where the regions lie further apart. Each box
     keeps covering its own region; overlapping regions are left as they are."""
@@ -35,13 +42,13 @@ def _trim(box_a, box_b, ra, rb):
     key_pos, key_size = ("x", "w") if pos == 0 else ("y", "h")
     if ra[key_pos] > rb[key_pos]:
         box_a, box_b, ra, rb = box_b, box_a, rb, ra
-    # box_a/ra lie before box_b/rb on the chosen axis. Stop BOX_PAD short of
+    # box_a/ra lie before box_b/rb on the chosen axis. Stop `pad` short of
     # the middle line, so the padded masks meet there instead of overlapping,
     # but never cut into the region itself.
     ra_end, rb_start = ra[key_pos] + ra[key_size], rb[key_pos]
     line = (ra_end + rb_start) / 2
-    a_end = max(line - BOX_PAD, ra_end)
-    b_start = min(line + BOX_PAD, rb_start)
+    a_end = max(line - pad, ra_end)
+    b_start = min(line + pad, rb_start)
     if box_a[pos] + box_a[size] > a_end:
         box_a[size] = a_end - box_a[pos]
     if box_b[pos] < b_start:
@@ -78,22 +85,23 @@ def mask_boxes(card):
     w = max(r["w"] for r in regions)
     h = _one_line_height(regions)
     boxes = [list(_centered(r, w, max(h, r["h"]))) for r in regions]
+    pad = box_pad(card)
     # Trimming only shrinks boxes, so it never creates a new overlap and one
     # pass over all pairs suffices.
     for i in range(len(boxes)):
         for j in range(i + 1, len(boxes)):
-            if overlapping_pairs([padded(boxes[i]), padded(boxes[j])]):
-                _trim(boxes[i], boxes[j], regions[i], regions[j])
+            if overlapping_pairs([padded(boxes[i], pad), padded(boxes[j], pad)]):
+                _trim(boxes[i], boxes[j], regions[i], regions[j], pad)
     return [tuple(b) for b in boxes]
 
 
-def padded(box):
-    """Box enlarged by BOX_PAD on every side, clamped to the image."""
+def padded(box, pad=BOX_PAD):
+    """Box enlarged by `pad` on every side, clamped to the image."""
     bx, by, bw, bh = box
-    x = max(0.0, bx - BOX_PAD)
-    y = max(0.0, by - BOX_PAD)
-    w = min(1.0 - x, bw + 2 * BOX_PAD)
-    h = min(1.0 - y, bh + 2 * BOX_PAD)
+    x = max(0.0, bx - pad)
+    y = max(0.0, by - pad)
+    w = min(1.0 - x, bw + 2 * pad)
+    h = min(1.0 - y, bh + 2 * pad)
     return (x, y, w, h)
 
 
