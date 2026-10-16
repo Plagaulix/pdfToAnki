@@ -37,6 +37,34 @@ class TestDiff(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("identical ✓", out)
 
+    NATIVE = {"guid": "io", "type": "occlusion", "native": True, "image": "eye.png",
+              "regions": [{"label": l, "x": .1 * n, "y": .1, "w": .05, "h": .05}
+                          for n, l in enumerate(("A", "B", "C"))]}
+
+    def test_removing_a_native_mask_drops_its_card(self):
+        smaller = dict(self.NATIVE, regions=self.NATIVE["regions"][:2])
+        with tempfile.TemporaryDirectory() as d:
+            rc, out = _run(_write(d, "a.cards.json", "T", [self.NATIVE]),
+                           _write(d, "b.cards.json", "T", [smaller]), strict=True)
+        self.assertEqual(rc, 1)
+        self.assertIn("cloze numbers c1,c2,c3 -> c1,c2", out)
+
+    def test_switching_to_native_changes_the_note_type(self):
+        legacy = dict(self.NATIVE, native=False)
+        with tempfile.TemporaryDirectory() as d:
+            rc, out = _run(_write(d, "a.cards.json", "T", [legacy]),
+                           _write(d, "b.cards.json", "T", [self.NATIVE]), strict=True)
+        self.assertEqual(rc, 1)
+        self.assertIn("note type/field layout", out)
+
+    def test_moving_native_masks_keeps_cards(self):
+        moved = dict(self.NATIVE, uniform_masks=True)
+        with tempfile.TemporaryDirectory() as d:
+            rc, out = _run(_write(d, "a.cards.json", "T", [self.NATIVE]),
+                           _write(d, "b.cards.json", "T", [moved]), strict=True)
+        self.assertEqual(rc, 0)
+        self.assertIn("uniform_masks", out)
+
     def test_added_removed_changed_moved(self):
         old = [
             {"guid": "g1", "type": "basic", "front": "Q1", "back": "A1"},

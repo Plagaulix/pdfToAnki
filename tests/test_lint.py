@@ -218,6 +218,50 @@ class TestLint(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("region 0", out)
 
+    def _occlusion(self, regions, **extra):
+        return _run({"deck": "D", "cards": [dict(
+            {"type": "occlusion", "image": "i.png", "regions": regions}, **extra)]},
+            extra_files={"i.png": b"x"})
+
+    def test_native_and_uniform_masks_are_known_fields(self):
+        rc, out = self._occlusion([{"label": "A", "x": .1, "y": .1, "w": .1, "h": .1}],
+                                  native=True, uniform_masks=True)
+        self.assertEqual(rc, 0)
+        self.assertNotIn("unknown field", out)
+
+    def test_native_and_uniform_masks_must_be_booleans(self):
+        for key in ("native", "uniform_masks"):
+            with self.subTest(key=key):
+                rc, out = self._occlusion(
+                    [{"label": "A", "x": .1, "y": .1, "w": .1, "h": .1}], **{key: "yes"})
+                self.assertEqual(rc, 1)
+                self.assertIn(f"'{key}' must be a boolean", out)
+
+    def test_overlapping_masks_warn(self):
+        rc, out = self._occlusion([{"label": "A", "x": .1, "y": .1, "w": .2, "h": .1},
+                                   {"label": "B", "x": .2, "y": .15, "w": .2, "h": .1}])
+        self.assertEqual(rc, 0)
+        self.assertIn("masks of regions 0 and 1 overlap", out)
+
+    def test_uniform_resizing_of_close_labels_does_not_warn(self):
+        regions = [{"label": "A", "x": .10, "y": .1, "w": .02, "h": .05},
+                   {"label": "B", "x": .15, "y": .1, "w": .02, "h": .05},
+                   {"label": "Long label", "x": .5, "y": .5, "w": .3, "h": .05}]
+        rc, out = self._occlusion(regions, uniform_masks=True)
+        self.assertEqual(rc, 0)
+        self.assertNotIn("overlap", out)
+
+    def test_native_notes_sharing_image_and_header_need_guids(self):
+        note = {"type": "occlusion", "native": True, "image": "i.png", "header": "H",
+                "regions": [{"label": "A", "x": .1, "y": .1, "w": .1, "h": .1}]}
+        rc, out = _run({"deck": "D", "cards": [note, dict(note)]},
+                       extra_files={"i.png": b"x"})
+        self.assertEqual(rc, 1)
+        self.assertIn("same image and header", out)
+        rc, _ = _run({"deck": "D", "cards": [note, dict(note, header="Other")]},
+                     extra_files={"i.png": b"x"})
+        self.assertEqual(rc, 0)
+
     def test_duplicate_guid_errors(self):
         # Two notes sharing a GUID -> Anki keeps one, the other's content is lost.
         rc, out = _run({"deck": "D", "cards": [

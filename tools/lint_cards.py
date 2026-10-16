@@ -12,6 +12,7 @@ import re
 import sys
 from _card_media import local_image_sources
 from _card_schema import TEXT_FIELDS, schema_errors
+from _occlusion import mask_boxes, overlapping_pairs
 
 _CLOZE_RE = re.compile(r"\{\{c(\d+)::.+?\}\}", re.DOTALL)
 _LONG_ANSWER = 350  # chars: above this, warn "answer may be too long"
@@ -24,7 +25,7 @@ _TYPE_KEYS = {
     "basic": {"front", "back", "reverse", "more"},
     "typein": {"front", "back", "more"},
     "cloze": {"text", "extra"},
-    "occlusion": {"image", "mode", "header", "extra", "regions"},
+    "occlusion": {"image", "mode", "header", "extra", "regions", "native", "uniform_masks"},
 }
 _REGION_KEYS = {"label", "x", "y", "w", "h"}
 
@@ -57,6 +58,7 @@ def lint(cards_path):
 
     seen_fronts = {}
     seen_guids = {}
+    seen_native = {}
     for i, card in enumerate(cards):
         guid = card.get("guid")
         if guid is not None:
@@ -109,6 +111,13 @@ def lint(cards_path):
                     warn(i, f"region {n}: no 'label' (answer stays empty).")
                 for key in sorted(set(r) - _REGION_KEYS):
                     warn(i, f"region {n}: unknown field '{key}' – ignored.")
+            for a, b in overlapping_pairs(mask_boxes(card)):
+                warn(i, f"masks of regions {a} and {b} overlap – one would hide or "
+                        "reveal part of the other label (separate the regions).")
+            if card.get("native") and not guid:
+                # The default native GUID derives from image + header only.
+                key = (card.get("image"), card.get("header", ""))
+                seen_native.setdefault(key, []).append(i)
             mode = card.get("mode", "hide-one")
             if mode not in ("hide-one", "hide-all"):
                 err(i, f"unknown mode '{mode}' (hide-one | hide-all).")
@@ -139,6 +148,12 @@ def lint(cards_path):
             # the others silently vanish (their content is lost).
             errors.append(f"  [ERROR] duplicate guid {guid!r} in cards {idxs} — "
                           "Anki would import only one of them, the rest are lost.")
+
+    for (image, _), idxs in seen_native.items():
+        if len(idxs) > 1:
+            errors.append(f"  [ERROR] native occlusion cards {idxs} share the same image and "
+                          f"header ({image}) — they would get the same GUID; give each a "
+                          "distinct 'header' or 'guid'.")
 
     print(f"== Lint: {cards_path} ({len(cards)} cards) ==")
     for line in errors:

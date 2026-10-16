@@ -26,6 +26,7 @@ import genanki
 from _filenames import collision_key
 from _card_media import rewrite_local_images
 from _card_schema import TEXT_FIELDS, validate_schema
+from _occlusion import mask_boxes, native_occlusion_field, padded
 
 
 def stable_id(text: str) -> int:
@@ -238,38 +239,114 @@ OCCLUSION_MODEL = genanki.Model(
 )
 
 
+
+class _StockKindModel(genanki.Model):
+    """genanki model that Anki recognizes as one of its stock note types.
+
+    genanki does not write 'originalStockKind'; without it Anki would treat the
+    imported note type as an ordinary cloze type (no mask editor)."""
+
+    def __init__(self, *args, stock_kind, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.stock_kind = stock_kind
+
+    def to_json(self, timestamp, deck_id):
+        data = super().to_json(timestamp, deck_id)
+        data["originalStockKind"] = self.stock_kind
+        return data
+
+
+# Anki's own "Image Occlusion" note type ("Schéma à Remplir" in French), as
+# created by Anki 26.05: same fields (with their IO field tags) and templates,
+# so the mask editor and Anki's reviewer JS handle these notes natively
+# (Anki >= 23.10). Its masks are stored as cloze text in the Occlusion field:
+# one note -> one card per mask. Our CSS is appended for the details box.
+_IO_TEMPLATE = """{{#Header}}<div>{{Header}}</div>{{/Header}}
+<div style="display: none">{{cloze:Occlusion}}</div>
+<div id="err"></div>
+<div id="image-occlusion-container">
+    {{Image}}
+    <canvas id="image-occlusion-canvas"></canvas>
+</div>
+<script>
+try {
+    anki.imageOcclusion.setup();
+} catch (exc) {
+    document.getElementById("err").innerHTML = `Error loading image occlusion. Is your Anki version up to date?<br><br>${exc}`;
+}
+</script>
+"""
+
+_IO_CSS = """#image-occlusion-canvas {
+    --inactive-shape-color: #ffeba2;
+    --active-shape-color: #ff8e8e;
+    --inactive-shape-border: 1px #212121;
+    --active-shape-border: 1px #212121;
+    --highlight-shape-color: #ff8e8e00;
+    --highlight-shape-border: 1px #ff8e8e;
+}
+"""
+
+_STOCK_KIND_IMAGE_OCCLUSION = 6
+
+IMAGE_OCCLUSION_MODEL = _StockKindModel(
+    stable_id("anki-card-forge:native-image-occlusion-model:v1"),
+    "Image Occlusion (anki-card-forge)",
+    model_type=genanki.Model.CLOZE,
+    stock_kind=_STOCK_KIND_IMAGE_OCCLUSION,
+    fields=[
+        {"name": "Occlusion", "tag": 0, "preventDeletion": True},
+        {"name": "Image", "tag": 1, "preventDeletion": True},
+        {"name": "Header", "tag": 2, "preventDeletion": True},
+        {"name": "Back Extra", "tag": 3, "preventDeletion": True},
+        {"name": "Comments", "tag": 4, "preventDeletion": False},
+    ],
+    templates=[
+        {
+            "name": "Image Occlusion",
+            "qfmt": _IO_TEMPLATE,
+            "afmt": _IO_TEMPLATE + '\n<div><button id="toggle">Toggle Masks</button></div>\n'
+                    "{{#Back Extra}}<div>{{Back Extra}}</div>{{/Back Extra}}\n",
+        }
+    ],
+    css=_IO_CSS + _CSS,
+)
+
+
 def _pct(value: float) -> str:
     return f"{float(value) * 100:.4f}%"
 
 
-# A bit of air around each box so mask/outline don't squeeze the (often small)
-# text skin-tight -> much easier to recognize and read.
-_BOX_PAD = 0.01
-
-
-def _box_style(r):
-    x = max(0.0, r["x"] - _BOX_PAD)
-    y = max(0.0, r["y"] - _BOX_PAD)
-    w = min(1.0 - x, r["w"] + 2 * _BOX_PAD)
-    h = min(1.0 - y, r["h"] + 2 * _BOX_PAD)
+def _style(box):
+    x, y, w, h = padded(box)
     return f"left:{_pct(x)};top:{_pct(y)};width:{_pct(w)};height:{_pct(h)}"
 
 
-def _occlusion_html(img_src, regions, target, mode, reveal, header, extra):
+def _box_style(r):
+    return _style((r["x"], r["y"], r["w"], r["h"]))
+
+
+def _occlusion_html(img_src, regions, target, mode, reveal, header, extra,
+                    boxes=None, show_label=True):
     """Renders one side of an occlusion card.
 
     reveal=False -> front (question), reveal=True -> back (answer).
     mode: "hide-one" (only the target region is masked) or
           "hide-all"  (all masked, only the target gets revealed).
+    boxes: unpadded mask boxes (default: the regions themselves).
+    show_label: caption with the answer below the image (Anki's native
+          occlusion shows none — it just uncovers the label in the image).
     """
+    if boxes is None:
+        boxes = [(r["x"], r["y"], r["w"], r["h"]) for r in regions]
     parts = []
     if header:
         parts.append(f'<div class="io-head">{html.escape(header)}</div>')
     parts.append('<div class="io-wrap">')
     parts.append(f'<img src="{html.escape(img_src, quote=True)}">')
 
-    for i, r in enumerate(regions):
-        pos = _box_style(r)
+    for i, box in enumerate(boxes):
+        pos = _style(box)
         if not reveal:  # front
             masked = True if mode == "hide-all" else (i == target)
         else:  # back
@@ -291,7 +368,7 @@ def _occlusion_html(img_src, regions, target, mode, reveal, header, extra):
 
     parts.append("</div>")
     if reveal:
-        answer = regions[target].get("label", "")
+        answer = regions[target].get("label", "") if show_label else ""
         if answer:
             parts.append(f'<div class="io-answer-label">{html.escape(answer)}</div>')
         if extra:
@@ -420,12 +497,34 @@ def render_occlusion(card, img_src):
     header = card.get("header", "")
     extra = card.get("extra", "")
     more = _more_html(card)
+    boxes = mask_boxes(card)
+    show_label = not card.get("native")
     out = []
     for target in range(len(regions)):
-        front = _occlusion_html(img_src, regions, target, mode, False, header, extra)
-        back = _occlusion_html(img_src, regions, target, mode, True, header, extra) + more
+        front = _occlusion_html(img_src, regions, target, mode, False, header, extra,
+                                boxes, show_label)
+        back = _occlusion_html(img_src, regions, target, mode, True, header, extra,
+                               boxes, show_label) + more
         out.append((front, back))
     return out
+
+
+def _add_native_occlusion_note(deck, card, img_src):
+    """ONE note of Anki's own Image Occlusion type; Anki makes a card per mask."""
+    # Masks are stored padded, so Anki shows exactly what the preview shows.
+    boxes = [padded(b) for b in mask_boxes(card)]
+    occlusion = native_occlusion_field(boxes, card.get("mode") == "hide-all")
+    header = html.escape(card.get("header", ""))
+    back_extra = card.get("extra", "") + _more_html(card)
+    # Labels are not part of the note (the mask uncovers the label printed in
+    # the image), so a label fix keeps the GUID and thus the learning progress.
+    guid = card.get("guid") or genanki.guid_for("image-occlusion", img_src, header)
+    deck.add_note(genanki.Note(
+        model=IMAGE_OCCLUSION_MODEL,
+        fields=[occlusion, f'<img src="{html.escape(img_src, quote=True)}">',
+                header, back_extra, ""],
+        tags=card.get("tags", []), guid=guid))
+    return 1
 
 
 def _add_occlusion_notes(deck, card, media):
@@ -433,6 +532,8 @@ def _add_occlusion_notes(deck, card, media):
     image_path = card["image"]
     media.add(image_path)
     img_src = os.path.basename(image_path)
+    if card.get("native"):
+        return _add_native_occlusion_note(deck, card, img_src)
     mode = card.get("mode", "hide-one")
     tags = card.get("tags", [])
     regions = card["regions"]

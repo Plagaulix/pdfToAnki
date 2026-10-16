@@ -50,8 +50,9 @@ def schema_errors(data):
         for key in (*TEXT_FIELDS, "source", "image", "mode", "type"):
             if key in card and not isinstance(card[key], str):
                 errors.append(prefix + f"'{key}' must be a string.")
-        if "reverse" in card and not isinstance(card["reverse"], bool):
-            errors.append(prefix + "'reverse' must be a boolean (true or false).")
+        for key in ("reverse", "native", "uniform_masks"):
+            if key in card and not isinstance(card[key], bool):
+                errors.append(prefix + f"'{key}' must be a boolean (true or false).")
         if "guid" in card and (
                 not isinstance(card["guid"], str) or not card["guid"].strip()):
             errors.append(prefix + "'guid' must be a non-empty string.")

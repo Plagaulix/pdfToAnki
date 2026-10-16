@@ -41,7 +41,7 @@ _TAG_RE = re.compile(r"<[^>]+>")
 # Everything content-bearing; 'guid' is the identity, not content.
 _COMPARE_KEYS = ("type", "front", "back", "text", "extra", "explanation",
                  "source", "reverse", "tags", "image", "mode", "header",
-                 "regions", "more")
+                 "regions", "more", "native", "uniform_masks")
 # Frozen builder identities, kept dependency-free so diff also runs without
 # genanki. Tests compare these against the actual builder model IDs.
 _JSON_MODEL_LAYOUTS = {
@@ -161,6 +161,10 @@ def _changed_fields(a, b):
 def _cloze_text(card):
     if "_raw" in card:
         return "\n".join(card["_raw"]["fields"])
+    if card.get("type") == "occlusion" and card.get("native"):
+        # Native image occlusion: mask N is cloze cN of one note (the build's
+        # Occlusion field); only the numbers matter here.
+        return "".join(f"{{{{c{n}::mask}}}}" for n in range(1, len(card.get("regions") or []) + 1))
     return card.get("text", "")
 
 
@@ -212,7 +216,8 @@ def diff(old_path, new_path, strict=False):
                               _cloze_numbers(_cloze_text(new_card)))
         if old_nums != new_nums:
             cloze_breaks.append((key, new_card, old_nums, new_nums))
-        structural = set(fields) & {"type", "reverse", "model_id", "field_names", "field_count", "card_ordinals"}
+        structural = set(fields) & {"type", "reverse", "native", "model_id", "field_names",
+                                    "field_count", "card_ordinals"}
         if structural:
             safety_breaks.append(f"{key[1]!r}: note type/field layout or card ordinals changed "
                                  f"({', '.join(sorted(structural))}); existing cards may not update or keep scheduling.")

@@ -8,6 +8,7 @@ availability for itself. This lets the pure logic (stable_id, box clamping,
 cloze numbering) be tested on the host and in CI regardless of genanki.
 """
 from html.parser import HTMLParser
+import re
 import sys
 import types
 import unittest
@@ -142,7 +143,6 @@ class TestBoxStyleClamp(unittest.TestCase):
     def test_padding_never_leaves_0_1(self):
         # A region flush against every edge: the padded box must stay within 0..1.
         style = bd._box_style({"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0})
-        import re
         vals = [float(p) for p in re.findall(r"([\d.]+)%", style)]
         self.assertTrue(all(0.0 <= v <= 100.0001 for v in vals), style)
 
@@ -208,6 +208,69 @@ class TestOcclusionTargets(unittest.TestCase):
                 self.assertEqual(masks[0]["style"], bd._box_style(self.REGIONS[target]))
                 self.assertNotIn("io-mask-target", front)
                 self.assertEqual(self.masks(self.render(target, "hide-one", reveal=True)), [])
+
+    def test_uniform_masks_render_with_identical_sizes(self):
+        regions = [dict(self.REGIONS[0], w=.05), self.REGIONS[1]]
+        card = {"type": "occlusion", "image": "d.png", "mode": "hide-all",
+                "uniform_masks": True, "regions": regions}
+        front, _ = bd.render_occlusion(card, "d.png")[0]
+        sizes = {re.search(r"width:[\d.]+%;height:[\d.]+%", m["style"]).group(0)
+                 for m in self.masks(front)}
+        self.assertEqual(len(sizes), 1)
+
+
+class TestNativeOcclusion(unittest.TestCase):
+    CARD = {"type": "occlusion", "native": True, "image": "figs/eye.png",
+            "mode": "hide-all", "header": "Coupe <du> globe",
+            "extra": "Fig. 1", "source": "Script p. 4", "tags": ["anat"],
+            "regions": [{"label": "Cornée", "x": .1, "y": .1, "w": .1, "h": .05},
+                        {"label": "Iris", "x": .5, "y": .5, "w": .2, "h": .05}]}
+
+    def build(self, card):
+        deck, _, count = bd._deck_from_data({"deck": "D", "cards": [dict(card)]}, set())
+        return deck.notes, count
+
+    def test_one_note_for_all_regions_on_the_native_model(self):
+        notes, count = self.build(self.CARD)
+        self.assertEqual((len(notes), count), (1, 1))
+        note = notes[0]
+        self.assertIs(note.model, bd.IMAGE_OCCLUSION_MODEL)
+        occlusion, image, header, back_extra, comments = note.fields
+        self.assertEqual(occlusion.count("image-occlusion:rect:"), 2)
+        self.assertEqual(occlusion.count(":oi=1}}"), 2)
+        self.assertIn("{{c2::", occlusion)
+        self.assertEqual(image, '<img src="eye.png">')
+        self.assertEqual(header, "Coupe &lt;du&gt; globe")
+        self.assertTrue(back_extra.startswith("Fig. 1"))
+        self.assertIn("Script p. 4", back_extra)
+        self.assertEqual(comments, "")
+        self.assertEqual(note.tags, ["anat"])
+
+    def test_hide_one_omits_occlude_inactive(self):
+        notes, _ = self.build(dict(self.CARD, mode="hide-one"))
+        self.assertNotIn("oi=1", notes[0].fields[0])
+
+    def test_native_masks_are_padded_like_the_preview(self):
+        notes, _ = self.build(self.CARD)
+        self.assertIn("left=.09:top=.09:width=.12:height=.07", notes[0].fields[0])
+
+    def test_guid_is_stable_across_label_changes_and_overridable(self):
+        renamed = dict(self.CARD, regions=[dict(r, label="x") for r in self.CARD["regions"]])
+        self.assertEqual(self.build(self.CARD)[0][0].guid, self.build(renamed)[0][0].guid)
+        self.assertEqual(self.build(dict(self.CARD, guid="g1"))[0][0].guid, "g1")
+
+    def test_native_model_is_flagged_as_anki_image_occlusion(self):
+        model = bd.IMAGE_OCCLUSION_MODEL
+        if hasattr(bd.genanki.Model, "to_json"):  # real genanki only
+            self.assertEqual(model.to_json(0, 1)["originalStockKind"], 6)
+        fields = model.fields if hasattr(model, "fields") else model.kw["fields"]
+        self.assertEqual([f["name"] for f in fields],
+                         ["Occlusion", "Image", "Header", "Back Extra", "Comments"])
+
+    def test_preview_shows_no_label_caption_like_anki(self):
+        _, back = bd.render_occlusion(dict(self.CARD), "eye.png")[0]
+        self.assertNotIn("io-answer-label", back)
+        self.assertIn("Script p. 4", back)
 
 
 if __name__ == "__main__":

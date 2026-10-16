@@ -412,15 +412,31 @@ the answer.
 
 ## Image occlusion ("image with hidden regions")
 
-Own, self-rendered card type (HTML/CSS overlay on top of the image — works in
-every Anki version, independent of Anki's internal IO format). Each region
-produces **one card**.
+Two note types, chosen per card with `native`:
+
+- **default** — own, self-rendered card type (HTML/CSS overlay on top of the
+  image — works in every Anki version, independent of Anki's internal IO
+  format). Each region produces **one note** with one card; the back shows the
+  label as a caption.
+- **`"native": true`** — ONE note of Anki's own *Image Occlusion* type (shown
+  as "Schéma à Remplir" in French; Anki ≥ 23.10) with one card per region.
+  Masks stay editable in Anki's mask editor; the back just uncovers the label
+  printed in the image (no caption), `header`/`extra`/details go to Anki's
+  Header and Back Extra fields. It is imported as its own note type
+  "Image Occlusion (anki-card-forge)", next to Anki's stock one. Its GUID derives
+  from image + header (or `guid`), so label fixes keep the progress; two native
+  cards on the same image need distinct headers. Removing or reordering
+  regions shifts the card numbers (cN) → progress of those cards is lost
+  (`deck_diff.py` warns). `apkg_to_cards.py` cannot convert these notes back:
+  rework them in Anki's mask editor.
 
 ```json
 {
   "type": "occlusion",
   "image": "sources/heart.png",
-  "mode": "hide-one",
+  "mode": "hide-all",
+  "native": true,
+  "uniform_masks": true,
   "header": "Label the heart",
   "extra": "<i>From: anatomy script p. 12</i>",
   "regions": [
@@ -436,10 +452,18 @@ produces **one card**.
   standalone file → run `figextract.sh` first and point to the crop
   (`extracted/<topic>/figures/<name>_p<page>_<i>.png`).
 - `mode`: `"hide-one"` (only the queried region is masked, rest visible) or
-  `"hide-all"` (all masked, on reveal only the queried one is shown).
+  `"hide-all"` (all masked, on reveal only the queried one is shown — Anki's
+  "Hide all, guess one").
 - `regions`: list of regions. **Coordinates as fractions 0..1** (relative to the
   image size): `x`/`y` = top-left corner, `w`/`h` = width/height. `label` = the
-  answer shown on the back.
+  answer (back caption; for `native` only used by the checks and the preview).
+- `uniform_masks` (optional, `true`): every mask gets the size of the largest
+  region, centered on its own label — the mask size no longer hints at the
+  answer's length. Where two masks would then overlap, both are trimmed to the
+  middle of the gap between their labels (as uniform as the layout allows).
+  `lint_cards.py` warns when masks still overlap, i.e. the regions themselves
+  overlap; separate them.
+- `native` (optional, `true`): Anki's own Image Occlusion note, see above.
 
 ### How to place the regions
 

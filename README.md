@@ -308,7 +308,9 @@ Details (cloze pitfalls, CSS updates): [AGENTS.md](AGENTS.md).
 - **cloze** — fill-in-the-blank `{{c1::…}}`.
 - **typein** — type the answer, Anki compares (for exact spellings).
 - **occlusion** — image with hidden regions (anatomy, diagrams …), self-rendered
-  HTML/CSS overlay that works in every Anki version.
+  HTML/CSS overlay that works in every Anki version, or with `native: true`
+  one note of Anki's own Image Occlusion type (Anki ≥ 23.10, masks editable in
+  Anki). `uniform_masks: true` gives all masks the same size.
 
 On **every** card, optionally a collapsed "Details & source" box
 (`explanation` + `source`) — elaborative feedback after the retrieval, without
@@ -335,7 +337,7 @@ answer. The tools package its card JSON with
 
 | Step | Tool | What it catches |
 |---|---|---|
-| Lint | `tools/lint_cards.py` | empty fields, missing deletions, bad occlusion coordinates, duplicate questions, typo'd field names |
+| Lint | `tools/lint_cards.py` | empty fields, missing deletions, bad or overlapping occlusion masks, duplicate questions, typo'd field names |
 | Grounding | `tools/grounding_check.py` | flags possible unsupported answers and wrong page citations for review |
 | Coverage | `tools/coverage.py` | near-duplicate cards across files, source pages without any card |
 | Preview | `tools/preview.sh` | renders light/dark images for visual inspection of layout and occlusion masks |
