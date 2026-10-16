@@ -252,7 +252,7 @@ class TestNativeOcclusion(unittest.TestCase):
 
     def test_native_masks_are_padded_like_the_preview(self):
         notes, _ = self.build(self.CARD)
-        self.assertIn("left=.09:top=.09:width=.12:height=.07", notes[0].fields[0])
+        self.assertIn("left=.095:top=.095:width=.11:height=.06", notes[0].fields[0])
 
     def test_guid_is_stable_across_label_changes_and_overridable(self):
         renamed = dict(self.CARD, regions=[dict(r, label="x") for r in self.CARD["regions"]])

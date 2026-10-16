@@ -457,9 +457,12 @@ Two note types, chosen per card with `native`:
 - `regions`: list of regions. **Coordinates as fractions 0..1** (relative to the
   image size): `x`/`y` = top-left corner, `w`/`h` = width/height. `label` = the
   answer (back caption; for `native` only used by the checks and the preview).
-- `uniform_masks` (optional, `true`): every mask gets the size of the largest
-  region, centered on its own label — the mask size no longer hints at the
-  answer's length. Where two masks would then overlap, both are trimmed to the
+- `uniform_masks` (optional, `true`): every mask gets the width of the widest
+  region and the height of the tallest one-line region, centered on its own
+  label — the mask size no longer hints at the answer's length. Multi-line
+  labels (taller than 1.5× the median region) keep their own height. Draw the
+  regions tight around the label text: the common size grows with the largest
+  one. Where two masks would then overlap, both are trimmed to the
   middle of the gap between their labels (as uniform as the layout allows).
   `lint_cards.py` warns when masks still overlap, i.e. the regions themselves
   overlap; separate them.

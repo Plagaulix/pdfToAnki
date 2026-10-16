@@ -25,6 +25,15 @@ class TestMaskBoxes(unittest.TestCase):
         self.assertAlmostEqual(y + h / 2, SMALL["y"] + SMALL["h"] / 2)
         self.assertEqual(boxes[1], (.50, .50, .30, .08))
 
+    def test_uniform_height_is_one_line_and_multiline_labels_keep_theirs(self):
+        lines = [{"label": str(n), "x": .1, "y": .1 + .1 * n, "w": .05 + .01 * n, "h": h}
+                 for n, h in enumerate((.035, .04, .04, .042))]
+        two_lines = {"label": "Two lines", "x": .6, "y": .5, "w": .1, "h": .08}
+        boxes = occ.mask_boxes({"uniform_masks": True, "regions": lines + [two_lines]})
+        self.assertEqual({round(b[2], 6) for b in boxes}, {.1})
+        self.assertEqual({round(b[3], 6) for b in boxes[:4]}, {.042})
+        self.assertAlmostEqual(boxes[4][3], .08)
+
     def test_uniform_masks_are_shifted_back_inside_the_image(self):
         edge = {"label": "E", "x": .0, "y": .97, "w": .02, "h": .02}
         boxes = occ.mask_boxes({"uniform_masks": True, "regions": [edge, LARGE]})
@@ -49,10 +58,11 @@ class TestMaskBoxes(unittest.TestCase):
                 self.assertLessEqual(y, region["y"] + 1e-9)
                 self.assertGreaterEqual(x + w, region["x"] + region["w"] - 1e-9)
                 self.assertGreaterEqual(y + h, region["y"] + region["h"] - 1e-9)
-        # Masks with room keep the common size.
+        # Masks with room keep the common width; the two-line label keeps its height.
         for n in (4, 5):
             self.assertAlmostEqual(boxes[n][2], .2)
-            self.assertAlmostEqual(boxes[n][3], .08)
+        self.assertAlmostEqual(boxes[4][3], .04)
+        self.assertAlmostEqual(boxes[5][3], .08)
 
     def test_trimmed_uniform_masks_still_do_not_overlap_once_padded(self):
         # Labels .02 apart: room for both paddings, so padded masks just touch.

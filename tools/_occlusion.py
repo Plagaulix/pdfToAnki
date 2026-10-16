@@ -6,7 +6,7 @@ w/h = width/height. A "box" is the (x, y, w, h) tuple of one mask.
 
 # A bit of air around each box so mask/outline don't squeeze the (often small)
 # text skin-tight -> much easier to recognize and read.
-BOX_PAD = 0.01
+BOX_PAD = 0.005
 
 
 def _centered(region, w, h):
@@ -49,20 +49,33 @@ def _trim(box_a, box_b, ra, rb):
         box_b[pos] = b_start
 
 
+# A region more than this factor taller than the median holds several lines.
+_MULTILINE_FACTOR = 1.5
+
+
+def _one_line_height(regions):
+    heights = sorted(r["h"] for r in regions)
+    median = heights[len(heights) // 2]
+    return max(h for h in heights if h <= _MULTILINE_FACTOR * median)
+
+
 def mask_boxes(card):
     """Unpadded mask box per region, in region order.
 
-    With "uniform_masks": true every mask gets the size of the largest region,
-    centered on its own label: the mask size then no longer hints at the length
-    of the hidden answer. Where two such masks would overlap, both are trimmed
-    to the middle of the gap between their labels ("as uniform as possible").
+    With "uniform_masks": true every mask gets the width of the widest region
+    and the height of the tallest one-line region, centered on its own label:
+    the mask size then no longer hints at the length of the hidden answer.
+    Multi-line labels keep their own height (it only tells that the answer
+    spans several lines, which the figure shows anyway). Where two such masks
+    would overlap, both are trimmed to the middle of the gap between their
+    labels ("as uniform as possible").
     """
     regions = card["regions"]
     if not (card.get("uniform_masks") and regions):
         return [(r["x"], r["y"], r["w"], r["h"]) for r in regions]
     w = max(r["w"] for r in regions)
-    h = max(r["h"] for r in regions)
-    boxes = [list(_centered(r, w, h)) for r in regions]
+    h = _one_line_height(regions)
+    boxes = [list(_centered(r, w, max(h, r["h"]))) for r in regions]
     # Trimming only shrinks boxes, so it never creates a new overlap and one
     # pass over all pairs suffices.
     for i in range(len(boxes)):
