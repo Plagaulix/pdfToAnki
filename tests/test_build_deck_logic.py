@@ -79,6 +79,7 @@ class TestStableIdFreeze(unittest.TestCase):
         "anki-karten:typein-model:v1": 761558241,
         "anki-karten:reversed-model:v1": 110796264,
         "anki-karten:occlusion-model:v1": 1990443147,
+        "anki-card-forge:native-image-occlusion-model:v1": 112052425,
     }
 
     def test_frozen_seed_values(self):
@@ -91,6 +92,8 @@ class TestStableIdFreeze(unittest.TestCase):
         self.assertEqual(bd.TYPEIN_MODEL.model_id, self.FROZEN["anki-karten:typein-model:v1"])
         self.assertEqual(bd.REVERSED_MODEL.model_id, self.FROZEN["anki-karten:reversed-model:v1"])
         self.assertEqual(bd.OCCLUSION_MODEL.model_id, self.FROZEN["anki-karten:occlusion-model:v1"])
+        self.assertEqual(bd.IMAGE_OCCLUSION_MODEL.model_id,
+                         self.FROZEN["anki-card-forge:native-image-occlusion-model:v1"])
 
     def test_dependency_free_diff_layouts_use_builder_model_ids(self):
         layouts = load("deck_diff")._JSON_MODEL_LAYOUTS
