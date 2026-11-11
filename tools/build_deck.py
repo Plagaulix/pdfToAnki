@@ -239,7 +239,6 @@ OCCLUSION_MODEL = genanki.Model(
 )
 
 
-
 class _StockKindModel(genanki.Model):
     """genanki model that Anki recognizes as one of its stock note types.
 
